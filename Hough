@@ -1,0 +1,114 @@
+import cv2,sys
+import numpy as np
+import time
+import operator
+import math
+
+np.seterr(over='ignore')
+
+def display(title,source):
+  cv2.imshow(title,source)
+  cv2.waitKey(1)
+
+# Funkcia na vykreslenie obrazka,vypocitam si kazdy bod na krunicu a  kazdemu tomuto bodu  nastavim zmes troch farieb BGR a zobrazim vystup
+def output_circles(image,x0,y0,r,color,thickness):
+  for t in xrange(0,360):
+    x=int(x0+r*(math.cos(math.radians(t))))
+    y=int(y0+r*(math.sin(math.radians(t))))
+    for d in range(thickness):
+      image.itemset((y,x,0),color[0])
+      image.itemset((y,x,1),color[1])
+      image.itemset((y,x,2),color[2])  
+  display("Circled Image",image)
+
+# Vstupny obrazok
+# Sample_Input radius 20-60 
+# Capture.JPG radius 20-100
+# HoughCircles2 radius 20-100
+# images   100-120
+# circles 10-60
+# Capture1 70-120
+original_image = cv2.imread('Capture1.JPG',1) 
+display("Original Image",original_image)
+
+gray = cv2.cvtColor(original_image,cv2.COLOR_BGR2GRAY)
+
+output = original_image.copy()
+ 
+# Gausov filter 
+blur_image = cv2.GaussianBlur(gray,(3,3),0)
+display("Blurred Image",blur_image)
+
+# Detekcia hran 
+edged_image = cv2.Canny(blur_image,80,200)
+display("Edge Detected Image",edged_image)
+
+# zistim si vysku a sirku vstupneho obrazka
+height = edged_image.shape[0]
+width = edged_image.shape[1]
+
+Rmin = 70 # Minimum Radius
+Rmax = 120# Maximum Radius
+
+# Parametricke vyjadrenie 
+# x=x0+r*cos(t)
+# y=y0+r*sin(t)
+
+accumulator = {}
+
+# Preiterujem sa cez vsetky body v obraze 
+for y in xrange(0,height):
+  for x in xrange(0,width):
+    #  ak najdem hranu , cize biela farba bude mat hodnotu 255
+    if edged_image.item(y,x) == 255:
+      # preiterujem sa cez zadany radius 
+      for r in xrange(Rmin,Rmax,2):
+        # preiterujem sa cez theta ,kedze kruznica tak bude 2pi
+        for t in xrange(0,360,2):
+
+          #  Vypocitam vsetky potencionalne stredy kruznice , cize kazdy nehranovy bod
+          x0 = int(x-(r*math.cos(math.radians(t))))
+          y0 = int(y-(r*math.sin(math.radians(t))))
+
+          
+          if x0>0 and x0<width and y0>0 and y0<height:
+            # zvysim akumulator ak je stred v hraniciach obrazku
+            if (x0,y0,r) in accumulator:
+              accumulator[(x0,y0,r)]=accumulator[(x0,y0,r)]+1
+            else:
+              accumulator[(x0,y0,r)]=0
+
+# vypocitanie kolko percent mame spravenych
+  sys.stdout.write("\r" + str(int(float(y+1)/float(height)*100))+"%")
+  sys.stdout.flush()
+
+
+# Kolko kruznich chcem vyprintit
+thresh = 20  
+print "Default threshold =",thresh," (-1 to exit)"
+# zoradim si krunice zdetekovane, vzostupne
+entire_sorted_accumulator = sorted(accumulator.items(),key=operator.itemgetter(1),reverse=True) 
+
+while True:
+  output = original_image.copy() # 
+  sorted_accumulator = entire_sorted_accumulator[:thresh]
+  draw_circles = [] # vytovrenie listu na ukladanie zdetekovanych kruznich
+ 
+  for circle in sorted_accumulator:
+    # pridanie do listu zdetekovane kruznice s parametrami (x0,y0,r)
+      draw_circles.append((circle[0][0],circle[0][1],circle[0][2])) 
+
+  for circle in draw_circles:
+      output_circles(output,circle[0],circle[1],circle[2],(0,255,0),3) # Vykreslenie 
+  # cv2.waitKey(0)
+  
+
+
+
+  thresh = input("Threshold : ") 
+  if thresh < 0:
+    break
+  cv2.destroyAllWindows()
+
+
+cv2.destroyAllWindows()
