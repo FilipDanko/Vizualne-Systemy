@@ -117,6 +117,4 @@ while True:
     break
 
   cv2.destroyAllWindows()
-print(accumulator)
-cv2.circle()
 cv2.destroyAllWindows()
