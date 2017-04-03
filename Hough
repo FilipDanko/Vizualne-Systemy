@@ -3,8 +3,8 @@ import numpy as np
 import time
 import operator
 import math
+import random
 
-np.seterr(over='ignore')
 
 def display(title,source):
   cv2.imshow(title,source)
@@ -28,7 +28,7 @@ def output_circles(image,x0,y0,r,color,thickness):
 # images   100-120
 # circles 10-60
 # Capture1 70-120
-original_image = cv2.imread('Capture1.JPG',1) 
+original_image = cv2.imread('circles.jpg',1) 
 display("Original Image",original_image)
 
 gray = cv2.cvtColor(original_image,cv2.COLOR_BGR2GRAY)
@@ -47,8 +47,11 @@ display("Edge Detected Image",edged_image)
 height = edged_image.shape[0]
 width = edged_image.shape[1]
 
-Rmin = 70 # Minimum Radius
-Rmax = 120# Maximum Radius
+Rmin = 10 # Minimum Radius
+Rmax = 60# Maximum Radius
+i = 0
+j = 0 
+k = 0
 
 # Parametricke vyjadrenie 
 # x=x0+r*cos(t)
@@ -70,9 +73,8 @@ for y in xrange(0,height):
           x0 = int(x-(r*math.cos(math.radians(t))))
           y0 = int(y-(r*math.sin(math.radians(t))))
 
-          
+          # Ak je stred v rozmedzi bodoch obrazu tak ak su body kruznice v akumulatore tak zvysim kazdy prvok a hladam tak lokalne maximum, ak nie tak vynulujem
           if x0>0 and x0<width and y0>0 and y0<height:
-            # zvysim akumulator ak je stred v hraniciach obrazku
             if (x0,y0,r) in accumulator:
               accumulator[(x0,y0,r)]=accumulator[(x0,y0,r)]+1
             else:
@@ -83,32 +85,38 @@ for y in xrange(0,height):
   sys.stdout.flush()
 
 
+
 # Kolko kruznich chcem vyprintit
-thresh = 20  
-print "Default threshold =",thresh," (-1 to exit)"
-# zoradim si krunice zdetekovane, vzostupne
-entire_sorted_accumulator = sorted(accumulator.items(),key=operator.itemgetter(1),reverse=True) 
+pocet = 15
+print "Defaultny pocet=",pocet," (-1 to exit)"
+# zoradim si kruznice zdetekovane, vzostupne
+acc_sort = sorted(accumulator.items(),key=operator.itemgetter(1),reverse=True) 
 
 while True:
   output = original_image.copy() # 
-  sorted_accumulator = entire_sorted_accumulator[:thresh]
+  sorted_accumulator = acc_sort[:pocet]
   draw_circles = [] # vytovrenie listu na ukladanie zdetekovanych kruznich
  
   for circle in sorted_accumulator:
+    
     # pridanie do listu zdetekovane kruznice s parametrami (x0,y0,r)
       draw_circles.append((circle[0][0],circle[0][1],circle[0][2])) 
 
   for circle in draw_circles:
-      output_circles(output,circle[0],circle[1],circle[2],(0,255,0),3) # Vykreslenie 
-  # cv2.waitKey(0)
-  
+      i = random.randint(0,255)
+      j = random.randint(0,255)
+      k = random.randint(0,255)
+      # output_circles(output,circle[0],circle[1],circle[2],(100+i/5,100+i,100+i/2),3) # Vykreslenie 
+      cv2.circle(output,(circle[0],circle[1]),circle[2],(i,j,k),2)
+      
+      display("Circled Image",output)
+      cv2.imwrite("DetectedCircle5.jpg",output)
 
-
-
-  thresh = input("Threshold : ") 
-  if thresh < 0:
+  pocet = input("Zadaj pocet kruznic : ") 
+  if pocet < 0:
     break
+
   cv2.destroyAllWindows()
-
-
+print(accumulator)
+cv2.circle()
 cv2.destroyAllWindows()
