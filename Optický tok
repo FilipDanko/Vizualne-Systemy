@@ -1,0 +1,156 @@
+import numpy as np
+import cv2
+import globalVariables as gV
+import random
+
+# premenne pouzite na vykreslenie obldznika na sledovanie 
+gV.selRoi = 0
+top_left= [160,213]
+bottom_right = [320,426]
+gV.first_time = 1
+# Parametre pre opticky tok
+lk_params = dict( winSize  = (15,15),
+                  maxLevel = 2,
+                  criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+def findDistance(r1,c1,r2,c2):
+	d = (r1-r2)**2 + (c1-c2)**2
+	d = d**0.5
+	return d
+
+def find_marker(image):
+	# do sedej, odstranit sum, zdetekovat hrany
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	gray = cv2.GaussianBlur(gray, (5, 5), 0)
+	edged = cv2.Canny(gray, 35, 125)
+ 
+	# najst contury a nechat si najvacsi
+	(_,cnts, _) = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+	c = max(cnts, key = cv2.contourArea)
+ 
+	
+	return cv2.minAreaRect(c)
+
+def distance_to_camera(knownWidth, focalLength, perWidth):
+	# 
+	return (knownWidth * focalLength) / perWidth
+
+KNOWN_DISTANCE = 9.0
+ 
+
+KNOWN_WIDTH = 3.0
+		
+#main function
+cv2.namedWindow('tracker')
+
+cap = cv2.VideoCapture(1)
+ret,frame = cap.read() 
+while True:
+	while True:
+		_,frame = cap.read() 
+		
+		
+		cv2.putText(frame,'Press a to start tracking',(20,50),cv2.FONT_HERSHEY_SIMPLEX,1,color = (60,100,75),thickness = 3)
+		cv2.rectangle(frame,(gV.top_left[1],gV.top_left[0]),(gV.bottom_right[1],gV.bottom_right[0]),color = (100,255,100),thickness = 4)
+	
+		# finding ROI
+		frameGray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+		roi = frameGray[gV.top_left[0]:gV.bottom_right[0], gV.top_left[1]:gV.bottom_right[1]  ] #selecting roi
+		new_corners = cv2.goodFeaturesToTrack(roi,50,0.01,10) #find corners
+	
+		
+	
+		new_corners[:,0,0] = new_corners[:,0,0] + gV.top_left[1]
+		new_corners[:,0,1] = new_corners[:,0,1] + gV.top_left[0]
+		 	 
+		#  vykresli kruhy, ktore reprezentuju rohy
+		for corner in new_corners:
+			cv2.circle(frame, (int(corner[0][0]),int(corner[0][1])) ,5,(255,0,0))
+	
+		
+		oldFrameGray = frameGray.copy()
+		old_corners = new_corners.copy()
+		# find marker for focal length
+		marker = find_marker(frame)
+		focalLength = (marker[1][0] * KNOWN_DISTANCE) / KNOWN_WIDTH
+		cv2.imshow('tracker',frame)
+		
+		a = cv2.waitKey(5)
+		if a== 27:
+			cv2.destroyAllWindows()
+			cap.release()
+		elif a == 97:
+			break
+		
+	#trackovanie objektov
+	while True:
+		# potrebujeme dva obrazky na vypocet optickeho toku
+	
+		# zachyt druhy obrazok
+		ret,frame = cap.read()
+		# najdi marker pre vypocet vzialenosti
+		marker = find_marker(frame)
+		inches = distance_to_camera(KNOWN_WIDTH, focalLength, marker[1][0])
+		frameGray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+		#najdeme nove body (rohy) pomocou optickeho toku
+		new_corners, st, err = cv2.calcOpticalFlowPyrLK(oldFrameGray, frameGray, old_corners, None, **lk_params)
+	
+		
+		# vypocitanie stredu kruhu, ktory bude zachytavat sledovany objekt
+		r_add,c_add = 0,0
+		for corner in new_corners:
+			r_add = r_add + corner[0][1]
+			c_add = c_add + corner[0][0]
+		centroid_row = int(1.0*r_add/len(new_corners))
+		centroid_col = int(1.0*c_add/len(new_corners))
+		# vykresli kruh 
+		cv2.circle(frame,(int(centroid_col),int(centroid_row)),5,(255,0,0)) 
+		
+		new_corners_updated = new_corners.copy()
+		tobedel = []
+		for index in range(len(new_corners)):
+			# definujeme vzdialenost stredu kruhu od ostatnych bodov, defaultna hodnota je 90 pixelov
+			if findDistance(new_corners[index][0][1],new_corners[index][0][0],int(centroid_row),int(centroid_col)) > 90:
+				tobedel.append(index)
+		new_corners_updated = np.delete(new_corners_updated,tobedel,0)
+	
+	
+
+		 # vykreslime nove kruznice, nove body, ktore sme vypocitali pomocou opt. toku
+		for corner in new_corners_updated:
+			cv2.circle(frame, (int(corner[0][0]),int(corner[0][1])) ,5,(0,255,0))
+			# ak hodnota zdetegovanych bodov padne pod 2 , zrus sledovanie
+		if len(new_corners_updated) < 2:
+			print 'stratene'
+			break
+		
+		ctr , rad = cv2.minEnclosingCircle(new_corners_updated)
+		# x,y,w,h = cv2.boundingRect(new_corners_updated)
+		
+		cv2.circle(frame, (int(ctr[0]),int(ctr[1])) ,int(rad),(0,0,255),thickness = 5)
+		
+		# cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),2)
+		
+		# update corners
+		oldFrameGray = frameGray.copy()
+		old_corners = new_corners_updated.copy()
+	
+		
+		
+		cv2.imshow('tracker',frame)
+		if not inches > 100 or  inches < 10:
+			pass
+			print(str(inches*2.54) + " cm")
+		
+
+		a = cv2.waitKey(5)
+		if a== 27:
+			cv2.destroyAllWindows()
+			cap.release()
+		elif a == 97:
+			break	
+	
+
+	
+		
+cv2.destroyAllWindows()		
